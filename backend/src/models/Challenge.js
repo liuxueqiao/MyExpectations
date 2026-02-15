@@ -1,31 +1,68 @@
-const mongoose = require("mongoose");
+const crypto = require("crypto");
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/db");
 
-const ParticipantSchema = new mongoose.Schema(
+const Challenge = sequelize.define(
+  "Challenge",
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    joinedAt: { type: Date, required: true },
-
-    startWeightKg: { type: Number, default: null },
-    endWeightKg: { type: Number, default: null },
-    deltaKg: { type: Number, default: null },
-    lossRate: { type: Number, default: null },
-    completed: { type: Boolean, default: false }
+    id: {
+      type: DataTypes.STRING(24),
+      primaryKey: true,
+      defaultValue: () => crypto.randomBytes(12).toString("hex"),
+    },
+    type: {
+      type: DataTypes.ENUM("weight_loss_weekly"),
+      allowNull: false,
+      defaultValue: "weight_loss_weekly",
+    },
+    title: { type: DataTypes.STRING(256), allowNull: false },
+    weekKey: { type: DataTypes.STRING(16), allowNull: false, unique: true },
+    startAt: { type: DataTypes.DATE, allowNull: false },
+    endAt: { type: DataTypes.DATE, allowNull: false },
+    targetLossKg: { type: DataTypes.FLOAT, allowNull: false },
   },
-  { _id: false }
+  {
+    tableName: "challenges",
+    timestamps: true,
+    indexes: [{ unique: true, fields: ["weekKey"] }],
+  }
 );
 
-const ChallengeSchema = new mongoose.Schema(
+const ChallengeParticipant = sequelize.define(
+  "ChallengeParticipant",
   {
-    type: { type: String, enum: ["weight_loss_weekly"], default: "weight_loss_weekly" },
-    title: { type: String, required: true },
-    weekKey: { type: String, required: true, unique: true, index: true },
-    startAt: { type: Date, required: true },
-    endAt: { type: Date, required: true },
-    targetLossKg: { type: Number, required: true },
-    participants: { type: [ParticipantSchema], default: [] }
+    id: {
+      type: DataTypes.STRING(24),
+      primaryKey: true,
+      defaultValue: () => crypto.randomBytes(12).toString("hex"),
+    },
+    challengeId: { type: DataTypes.STRING(24), allowNull: false },
+    userId: { type: DataTypes.STRING(24), allowNull: false },
+    joinedAt: { type: DataTypes.DATE, allowNull: false },
+    startWeightKg: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: null,
+    },
+    endWeightKg: { type: DataTypes.FLOAT, allowNull: true, defaultValue: null },
+    deltaKg: { type: DataTypes.FLOAT, allowNull: true, defaultValue: null },
+    lossRate: { type: DataTypes.FLOAT, allowNull: true, defaultValue: null },
+    completed: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
   },
-  { timestamps: true }
+  {
+    tableName: "challenge_participants",
+    timestamps: true,
+    indexes: [
+      { unique: true, fields: ["challengeId", "userId"] },
+      { fields: ["userId"] },
+      { fields: ["challengeId"] },
+    ],
+  }
 );
 
-module.exports = mongoose.model("Challenge", ChallengeSchema);
-
+module.exports = Challenge;
+module.exports.ChallengeParticipant = ChallengeParticipant;

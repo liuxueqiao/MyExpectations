@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const Team = require("../models/Team");
 const User = require("../models/User");
 const WeightRecord = require("../models/WeightRecord");
+const { Op } = require("sequelize");
 const { startOfWeekMonday, toDateOnlyKey } = require("../utils/date");
 const { safeDeltaKg, safeLossRate } = require("../utils/privacy");
 const { todayKeyCN } = require("./weight.controller");
@@ -21,40 +22,44 @@ async function createTeam(req, res, next) {
   try {
     const name = String(req.body?.name || "").trim();
     if (!name) {
-      return res.status(400).json({ error: { code: "BAD_REQUEST", message: "name is required" } });
+      return res
+        .status(400)
+        .json({ error: { code: "BAD_REQUEST", message: "name is required" } });
     }
 
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ error: { code: "NOT_FOUND", message: "User not found" } });
+    const user = await User.findByPk(String(req.user.id));
+    if (!user)
+      return res
+        .status(404)
+        .json({ error: { code: "NOT_FOUND", message: "User not found" } });
     if (user.teamId) {
       return res.status(409).json({
-        error: { code: "ALREADY_IN_TEAM", message: "Already in a team" }
+        error: { code: "ALREADY_IN_TEAM", message: "Already in a team" },
       });
     }
 
     let inviteCode = generateInviteCode();
     for (let i = 0; i < 5; i++) {
-      const exists = await Team.findOne({ inviteCode }).lean();
+      const exists = await Team.findOne({ where: { inviteCode }, raw: true });
       if (!exists) break;
       inviteCode = generateInviteCode();
     }
 
     const team = await Team.create({
       name,
-      ownerId: user._id,
+      ownerId: user.id,
       inviteCode,
-      members: [user._id]
     });
 
-    user.teamId = team._id;
+    user.teamId = team.id;
     await user.save();
 
     return res.json({
       team: {
-        id: String(team._id),
+        id: String(team.id),
         name: team.name,
-        inviteCode: team.inviteCode
-      }
+        inviteCode: team.inviteCode,
+      },
     });
   } catch (err) {
     return next(err);
@@ -63,36 +68,44 @@ async function createTeam(req, res, next) {
 
 async function joinTeam(req, res, next) {
   try {
-    const inviteCode = String(req.body?.inviteCode || "").trim().toUpperCase();
+    const inviteCode = String(req.body?.inviteCode || "")
+      .trim()
+      .toUpperCase();
     if (!inviteCode) {
       return res
         .status(400)
-        .json({ error: { code: "BAD_REQUEST", message: "inviteCode is required" } });
+        .json({
+          error: { code: "BAD_REQUEST", message: "inviteCode is required" },
+        });
     }
 
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ error: { code: "NOT_FOUND", message: "User not found" } });
+    const user = await User.findByPk(String(req.user.id));
+    if (!user)
+      return res
+        .status(404)
+        .json({ error: { code: "NOT_FOUND", message: "User not found" } });
     if (user.teamId) {
       return res.status(409).json({
-        error: { code: "ALREADY_IN_TEAM", message: "Already in a team" }
+        error: { code: "ALREADY_IN_TEAM", message: "Already in a team" },
       });
     }
 
-    const team = await Team.findOne({ inviteCode });
+    const team = await Team.findOne({ where: { inviteCode } });
     if (!team) {
-      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Team not found" } });
+      return res
+        .status(404)
+        .json({ error: { code: "NOT_FOUND", message: "Team not found" } });
     }
 
-    team.members = Array.from(new Set([...team.members.map(String), String(user._id)])).map(
-      (id) => id
-    );
-    await Team.updateOne({ _id: team._id }, { $addToSet: { members: user._id } });
-
-    user.teamId = team._id;
+    user.teamId = team.id;
     await user.save();
 
     return res.json({
-      team: { id: String(team._id), name: team.name, inviteCode: team.inviteCode }
+      team: {
+        id: String(team.id),
+        name: team.name,
+        inviteCode: team.inviteCode,
+      },
     });
   } catch (err) {
     return next(err);
@@ -101,13 +114,8 @@ async function joinTeam(req, res, next) {
 
 async function leaveTeam(req, res, next) {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findByPk(String(req.user.id));
     if (!user || !user.teamId) return res.json({ ok: true });
-
-    const team = await Team.findById(user.teamId);
-    if (team) {
-      await Team.updateOne({ _id: team._id }, { $pull: { members: user._id } });
-    }
 
     user.teamId = null;
     await user.save();
@@ -119,32 +127,42 @@ async function leaveTeam(req, res, next) {
 
 async function getMyTeam(req, res, next) {
   try {
-    const user = await User.findById(req.user.id).lean();
+    const user = await User.findByPk(String(req.user.id), { raw: true });
     if (!user?.teamId) return res.json({ team: null });
 
-    const team = await Team.findById(user.teamId).lean();
+    const team = await Team.findByPk(String(user.teamId), { raw: true });
     if (!team) return res.json({ team: null });
 
-    const memberIds = team.members.map((id) => String(id));
-    const members = await User.find({ _id: { $in: memberIds } }, { nickname: 1, avatarUrl: 1 })
-      .lean();
-    const memberMap = new Map(members.map((m) => [String(m._id), m]));
+    const members = await User.findAll({
+      where: { teamId: String(team.id) },
+      attributes: ["id", "nickname", "avatarUrl"],
+      raw: true,
+    });
+    const memberIds = members.map((m) => String(m.id));
+    const memberMap = new Map(members.map((m) => [String(m.id), m]));
 
     const todayKey = todayKeyCN();
     const weekStartKey = toDateOnlyKey(startOfWeekMonday(new Date()));
 
-    const todayRecords = await WeightRecord.find(
-      { userId: { $in: memberIds }, dateKey: todayKey },
-      { userId: 1 }
-    ).lean();
+    const todayRecords = await WeightRecord.findAll({
+      where: { userId: { [Op.in]: memberIds }, dateKey: todayKey },
+      attributes: ["userId"],
+      raw: true,
+    });
     const checkedInSet = new Set(todayRecords.map((r) => String(r.userId)));
 
-    const weekRecords = await WeightRecord.find(
-      { userId: { $in: memberIds }, dateKey: { $gte: weekStartKey, $lte: todayKey } },
-      { userId: 1, dateKey: 1, weightKg: 1 }
-    )
-      .sort({ userId: 1, dateKey: 1 })
-      .lean();
+    const weekRecords = await WeightRecord.findAll({
+      where: {
+        userId: { [Op.in]: memberIds },
+        dateKey: { [Op.gte]: weekStartKey, [Op.lte]: todayKey },
+      },
+      attributes: ["userId", "dateKey", "weightKg"],
+      order: [
+        ["userId", "ASC"],
+        ["dateKey", "ASC"],
+      ],
+      raw: true,
+    });
 
     const byUser = new Map();
     for (const r of weekRecords) {
@@ -165,7 +183,7 @@ async function getMyTeam(req, res, next) {
       const series = rows.map((x) => ({
         dateKey: x.dateKey,
         ...(isSelf ? { weightKg: x.weightKg } : {}),
-        deltaKg: safeDeltaKg(startKg, x.weightKg)
+        deltaKg: safeDeltaKg(startKg, x.weightKg),
       }));
 
       return {
@@ -175,18 +193,18 @@ async function getMyTeam(req, res, next) {
         checkedInToday: checkedInSet.has(uid),
         weekDeltaKg: deltaKg,
         weekLossRate: lossRate,
-        series
+        series,
       };
     });
 
     return res.json({
       team: {
-        id: String(team._id),
+        id: String(team.id),
         name: team.name,
         inviteCode: team.inviteCode,
         ownerId: String(team.ownerId),
-        members: items
-      }
+        members: items,
+      },
     });
   } catch (err) {
     return next(err);

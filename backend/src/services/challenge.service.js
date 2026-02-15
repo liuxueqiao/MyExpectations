@@ -1,6 +1,12 @@
 const Challenge = require("../models/Challenge");
+const { ChallengeParticipant } = require("../models/Challenge");
 const WeightRecord = require("../models/WeightRecord");
-const { endOfWeekSunday, startOfWeekMonday, toDateOnlyKey } = require("../utils/date");
+const { Op } = require("sequelize");
+const {
+  endOfWeekSunday,
+  startOfWeekMonday,
+  toDateOnlyKey,
+} = require("../utils/date");
 const { safeDeltaKg, safeLossRate } = require("../utils/privacy");
 
 function defaultWeeklyTargetKg() {
@@ -17,7 +23,7 @@ async function ensureWeeklyChallenge(now) {
   const endAt = endOfWeekSunday(now);
   const weekKey = toDateOnlyKey(startAt);
 
-  const existing = await Challenge.findOne({ weekKey });
+  const existing = await Challenge.findOne({ where: { weekKey } });
   if (existing) return existing;
 
   const targetLossKg = defaultWeeklyTargetKg();
@@ -28,7 +34,6 @@ async function ensureWeeklyChallenge(now) {
     startAt,
     endAt,
     targetLossKg,
-    participants: []
   });
 
   return challenge;
@@ -37,25 +42,27 @@ async function ensureWeeklyChallenge(now) {
 async function getCurrentWeeklyChallenge(now) {
   const startAt = startOfWeekMonday(now);
   const weekKey = toDateOnlyKey(startAt);
-  return Challenge.findOne({ weekKey });
+  return Challenge.findOne({ where: { weekKey } });
 }
 
 async function joinCurrentChallenge({ userId, now }) {
   const challenge = await ensureWeeklyChallenge(now);
 
-  const already = challenge.participants.find((p) => String(p.userId) === String(userId));
+  const already = await ChallengeParticipant.findOne({
+    where: { challengeId: challenge.id, userId: String(userId) },
+  });
   if (already) return challenge;
 
-  challenge.participants.push({
+  await ChallengeParticipant.create({
+    challengeId: challenge.id,
     userId,
     joinedAt: now,
     startWeightKg: null,
     endWeightKg: null,
     deltaKg: null,
     lossRate: null,
-    completed: false
+    completed: false,
   });
-  await challenge.save();
 
   return challenge;
 }
@@ -64,22 +71,27 @@ async function computeChallengeResults(challenge) {
   const startKey = toDateOnlyKey(challenge.startAt);
   const endKey = toDateOnlyKey(challenge.endAt);
 
-  const userIds = challenge.participants.map((p) => p.userId);
+  const participants = await ChallengeParticipant.findAll({
+    where: { challengeId: challenge.id },
+  });
+  const userIds = participants.map((p) => String(p.userId));
 
-  const startWeights = await WeightRecord.find({
-    userId: { $in: userIds },
-    dateKey: startKey
-  }).lean();
-  const endWeights = await WeightRecord.find({
-    userId: { $in: userIds },
-    dateKey: endKey
-  }).lean();
+  const startWeights = await WeightRecord.findAll({
+    where: { userId: { [Op.in]: userIds }, dateKey: startKey },
+    raw: true,
+  });
+  const endWeights = await WeightRecord.findAll({
+    where: { userId: { [Op.in]: userIds }, dateKey: endKey },
+    raw: true,
+  });
 
-  const startMap = new Map(startWeights.map((r) => [String(r.userId), r.weightKg]));
+  const startMap = new Map(
+    startWeights.map((r) => [String(r.userId), r.weightKg])
+  );
   const endMap = new Map(endWeights.map((r) => [String(r.userId), r.weightKg]));
 
   let changed = false;
-  for (const p of challenge.participants) {
+  for (const p of participants) {
     const sid = String(p.userId);
     const startKg = startMap.get(sid) ?? null;
     const endKg = endMap.get(sid) ?? null;
@@ -87,7 +99,9 @@ async function computeChallengeResults(challenge) {
     const deltaKg = safeDeltaKg(startKg, endKg);
     const lossRate = safeLossRate(startKg, endKg);
     const completed =
-      typeof deltaKg === "number" ? deltaKg >= Number(challenge.targetLossKg || 0) : false;
+      typeof deltaKg === "number"
+        ? deltaKg >= Number(challenge.targetLossKg || 0)
+        : false;
 
     if (
       p.startWeightKg !== startKg ||
@@ -105,7 +119,10 @@ async function computeChallengeResults(challenge) {
     }
   }
 
-  if (changed) await challenge.save();
+  if (changed) {
+    await Promise.all(participants.map((p) => p.save()));
+  }
+
   return challenge;
 }
 
@@ -113,6 +130,5 @@ module.exports = {
   ensureWeeklyChallenge,
   getCurrentWeeklyChallenge,
   joinCurrentChallenge,
-  computeChallengeResults
+  computeChallengeResults,
 };
-

@@ -1,22 +1,53 @@
-const mongoose = require("mongoose");
+const crypto = require("crypto");
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/db");
 
-const UserSchema = new mongoose.Schema(
+const User = sequelize.define(
+  "User",
   {
-    openid: { type: String, required: true, unique: true, index: true },
-    nickname: { type: String, default: "" },
-    avatarUrl: { type: String, default: "" },
+    id: {
+      type: DataTypes.STRING(24),
+      primaryKey: true,
+      defaultValue: () => crypto.randomBytes(12).toString("hex"),
+    },
+    openid: { type: DataTypes.STRING(64), allowNull: false, unique: true },
+    nickname: {
+      type: DataTypes.STRING(64),
+      allowNull: false,
+      defaultValue: "",
+    },
+    avatarUrl: {
+      type: DataTypes.STRING(512),
+      allowNull: false,
+      defaultValue: "",
+    },
 
-    initialWeightKg: { type: Number, default: null },
-    targetWeightKg: { type: Number, default: null },
-    heightCm: { type: Number, default: null },
+    initialWeightKg: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: null,
+    },
+    targetWeightKg: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: null,
+    },
+    heightCm: { type: DataTypes.INTEGER, allowNull: true, defaultValue: null },
 
-    teamId: { type: mongoose.Schema.Types.ObjectId, ref: "Team", default: null },
+    teamId: { type: DataTypes.STRING(24), allowNull: true, defaultValue: null },
 
-    lastCheckInDateKey: { type: String, default: null },
-    streakDays: { type: Number, default: 0 }
+    lastCheckInDateKey: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null,
+    },
+    streakDays: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   },
-  { timestamps: true }
+  {
+    tableName: "users",
+    timestamps: true,
+    indexes: [{ unique: true, fields: ["openid"] }],
+  }
 );
 
-module.exports = mongoose.model("User", UserSchema);
-
+module.exports = User;

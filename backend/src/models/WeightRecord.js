@@ -1,15 +1,28 @@
-const mongoose = require("mongoose");
+const crypto = require("crypto");
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/db");
 
-const WeightRecordSchema = new mongoose.Schema(
+const WeightRecord = sequelize.define(
+  "WeightRecord",
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    dateKey: { type: String, required: true, index: true },
-    weightKg: { type: Number, required: true }
+    id: {
+      type: DataTypes.STRING(24),
+      primaryKey: true,
+      defaultValue: () => crypto.randomBytes(12).toString("hex"),
+    },
+    userId: { type: DataTypes.STRING(24), allowNull: false },
+    dateKey: { type: DataTypes.STRING(16), allowNull: false },
+    weightKg: { type: DataTypes.FLOAT, allowNull: false },
   },
-  { timestamps: true }
+  {
+    tableName: "weight_records",
+    timestamps: true,
+    indexes: [
+      { unique: true, fields: ["userId", "dateKey"] },
+      { fields: ["userId"] },
+      { fields: ["dateKey"] },
+    ],
+  }
 );
 
-WeightRecordSchema.index({ userId: 1, dateKey: 1 }, { unique: true });
-
-module.exports = mongoose.model("WeightRecord", WeightRecordSchema);
-
+module.exports = WeightRecord;
