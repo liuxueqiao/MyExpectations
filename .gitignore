@@ -11,8 +11,8 @@ node_modules
 .DS_Store
 dist
 *.local
-.env
-backend/.env
+# .env
+# backend/.env
 
 # Editor directories and files
 .idea
