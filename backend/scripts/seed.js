@@ -1,14 +1,14 @@
 require("dotenv").config();
 
-const { connectMySQL } = require("../src/config/db");
+const { connectMongo } = require("../src/config/db");
 const { getEnv } = require("../src/config/env");
 const Article = require("../src/models/Article");
 
 async function main() {
-  getEnv();
-  await connectMySQL();
+  const env = getEnv();
+  await connectMongo(env.MONGO_URI);
 
-  const count = await Article.count({ where: { status: "published" } });
+  const count = await Article.countDocuments({ status: "published" });
   if (count > 0) return;
 
   await Article.create({
@@ -16,7 +16,7 @@ async function main() {
     coverUrl: "",
     content: "<p>每天打卡一点点，小队互相监督，一周后就能看到变化。</p>",
     status: "published",
-    publishedAt: new Date(),
+    publishedAt: new Date()
   });
 }
 
@@ -28,3 +28,4 @@ main()
     console.error(err);
     process.exit(1);
   });
+

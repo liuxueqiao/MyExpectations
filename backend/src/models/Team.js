@@ -1,24 +1,14 @@
-const crypto = require("crypto");
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/db");
+const mongoose = require("mongoose");
 
-const Team = sequelize.define(
-  "Team",
+const TeamSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.STRING(24),
-      primaryKey: true,
-      defaultValue: () => crypto.randomBytes(12).toString("hex"),
-    },
-    name: { type: DataTypes.STRING(64), allowNull: false },
-    ownerId: { type: DataTypes.STRING(24), allowNull: false },
-    inviteCode: { type: DataTypes.STRING(16), allowNull: false, unique: true },
+    name: { type: String, required: true },
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    inviteCode: { type: String, required: true, unique: true, index: true },
+    members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]
   },
-  {
-    tableName: "teams",
-    timestamps: true,
-    indexes: [{ unique: true, fields: ["inviteCode"] }],
-  }
+  { timestamps: true }
 );
 
-module.exports = Team;
+module.exports = mongoose.model("Team", TeamSchema);
+

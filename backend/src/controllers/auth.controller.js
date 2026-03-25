@@ -46,22 +46,21 @@ async function wxLogin(req, res, next) {
     if (typeof nickname === "string") update.nickname = nickname;
     if (typeof avatarUrl === "string") update.avatarUrl = avatarUrl;
 
-    let user = await User.findOne({ where: { openid } });
-    if (!user) {
-      user = await User.create({ openid, ...update });
-    } else if (Object.keys(update).length) {
-      await user.update(update);
-    }
+    const user = await User.findOneAndUpdate(
+      { openid },
+      { $setOnInsert: { openid }, $set: update },
+      { new: true, upsert: true }
+    );
 
     const token = jwt.sign({ openid }, env.JWT_SECRET, {
-      subject: String(user.id),
+      subject: String(user._id),
       expiresIn: env.JWT_EXPIRES_IN,
     });
 
     return res.json({
       token,
       user: {
-        id: String(user.id),
+        id: String(user._id),
         nickname: user.nickname,
         avatarUrl: user.avatarUrl,
         initialWeightKg: user.initialWeightKg,
@@ -91,17 +90,21 @@ async function devLogin(req, res, next) {
       typeof req.body?.avatarUrl === "string" ? req.body.avatarUrl : "";
     const openid = `dev_${crypto.randomBytes(12).toString("hex")}`;
 
-    const user = await User.create({ openid, nickname, avatarUrl });
+    const user = await User.findOneAndUpdate(
+      { openid },
+      { $setOnInsert: { openid }, $set: { nickname, avatarUrl } },
+      { new: true, upsert: true }
+    );
 
     const token = jwt.sign({ openid }, env.JWT_SECRET, {
-      subject: String(user.id),
+      subject: String(user._id),
       expiresIn: env.JWT_EXPIRES_IN,
     });
 
     return res.json({
       token,
       user: {
-        id: String(user.id),
+        id: String(user._id),
         nickname: user.nickname,
         avatarUrl: user.avatarUrl,
         initialWeightKg: user.initialWeightKg,

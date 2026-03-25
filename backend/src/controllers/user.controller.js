@@ -2,7 +2,7 @@ const User = require("../models/User");
 
 async function getMe(req, res, next) {
   try {
-    const user = await User.findByPk(String(req.user.id), { raw: true });
+    const user = await User.findById(req.user.id).lean();
     if (!user) {
       return res
         .status(401)
@@ -10,7 +10,7 @@ async function getMe(req, res, next) {
     }
     return res.json({
       user: {
-        id: String(user.id),
+        id: String(user._id),
         nickname: user.nickname,
         avatarUrl: user.avatarUrl,
         initialWeightKg: user.initialWeightKg,
@@ -59,26 +59,21 @@ async function updateProfile(req, res, next) {
       });
     }
 
-    const patch = {
-      ...(initialWeightKg != null ? { initialWeightKg } : {}),
-      ...(targetWeightKg != null ? { targetWeightKg } : {}),
-      ...(heightCm != null ? { heightCm } : {}),
-    };
-
-    if (Object.keys(patch).length) {
-      await User.update(patch, { where: { id: String(req.user.id) } });
-    }
-
-    const user = await User.findByPk(String(req.user.id), { raw: true });
-    if (!user) {
-      return res
-        .status(401)
-        .json({ error: { code: "UNAUTHORIZED", message: "User not found" } });
-    }
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        $set: {
+          ...(initialWeightKg != null ? { initialWeightKg } : {}),
+          ...(targetWeightKg != null ? { targetWeightKg } : {}),
+          ...(heightCm != null ? { heightCm } : {}),
+        },
+      },
+      { new: true }
+    );
 
     return res.json({
       user: {
-        id: String(user.id),
+        id: String(user._id),
         nickname: user.nickname,
         avatarUrl: user.avatarUrl,
         initialWeightKg: user.initialWeightKg,

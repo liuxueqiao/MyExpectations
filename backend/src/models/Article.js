@@ -1,34 +1,15 @@
-const crypto = require("crypto");
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/db");
+const mongoose = require("mongoose");
 
-const Article = sequelize.define(
-  "Article",
+const ArticleSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.STRING(24),
-      primaryKey: true,
-      defaultValue: () => crypto.randomBytes(12).toString("hex"),
-    },
-    title: { type: DataTypes.STRING(256), allowNull: false },
-    coverUrl: {
-      type: DataTypes.STRING(1024),
-      allowNull: false,
-      defaultValue: "",
-    },
-    content: {
-      type: DataTypes.TEXT("long"),
-      allowNull: false,
-      defaultValue: "",
-    },
-    status: {
-      type: DataTypes.ENUM("draft", "published"),
-      allowNull: false,
-      defaultValue: "published",
-    },
-    publishedAt: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
+    title: { type: String, required: true },
+    coverUrl: { type: String, default: "" },
+    content: { type: String, default: "" },
+    status: { type: String, enum: ["draft", "published"], default: "published" },
+    publishedAt: { type: Date, default: null }
   },
-  { tableName: "articles", timestamps: true }
+  { timestamps: true }
 );
 
-module.exports = Article;
+module.exports = mongoose.model("Article", ArticleSchema);
+

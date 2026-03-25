@@ -15,11 +15,10 @@ function getEnv() {
   return {
     NODE_ENV: optional("NODE_ENV", "development"),
     PORT: Number(optional("PORT", "3000")),
-    MYSQL_HOST: required("MYSQL_HOST"),
-    MYSQL_PORT: Number(optional("MYSQL_PORT", "3306")),
-    MYSQL_USER: required("MYSQL_USER"),
-    MYSQL_PASSWORD: optional("MYSQL_PASSWORD", ""),
-    MYSQL_DATABASE: required("MYSQL_DATABASE"),
+    MONGO_URI:
+      process.env.MONGO_IN_MEMORY === "1"
+        ? optional("MONGO_URI", "")
+        : required("MONGO_URI"),
     JWT_SECRET: required("JWT_SECRET"),
     JWT_EXPIRES_IN: optional("JWT_EXPIRES_IN", "30d"),
     WX_APPID: required("WX_APPID"),
