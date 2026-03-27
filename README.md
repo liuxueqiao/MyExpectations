@@ -1,5 +1,8 @@
 # 瘦搭子（MVP）
 
+# 重启后端服务：pm2 restart shoushenquan-backend
+
+
 ## 目录结构
 
 - [backend](file:///Users/liuxueqiao/qiao/mine_practice/UniappScanAssistant/backend)：Node.js + Express + MongoDB API
